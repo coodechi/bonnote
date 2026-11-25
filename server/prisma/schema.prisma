@@ -1,0 +1,114 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique @db.VarChar(120)
+  password  String   @db.VarChar(100)
+  nickname  String   @db.VarChar(40)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  notes     Note[]
+  folders   Folder[]
+  tags      Tag[]
+
+  @@map("users")
+}
+
+model Folder {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(40)
+  icon      String   @default("📒") @db.VarChar(16)
+  color     String   @default("#E07A4C") @db.VarChar(16)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes     Note[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("folders")
+}
+
+model Tag {
+  id        String    @id @default(cuid())
+  name      String    @db.VarChar(24)
+  color     String    @default("#7A5EA7") @db.VarChar(16)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes     NoteTag[]
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("tags")
+}
+
+model Note {
+  id        String          @id @default(cuid())
+  title     String          @default("") @db.VarChar(200)
+  content   String          @db.Text
+  color     String          @default("ivory") @db.VarChar(16)
+  pinned    Boolean         @default(false)
+  archived  Boolean         @default(false)
+  favorite  Boolean         @default(false)
+  remindAt  DateTime?
+  deletedAt DateTime?
+  folderId  String?
+  folder    Folder?         @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags      NoteTag[]
+  checklist ChecklistItem[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([userId, deletedAt, archived])
+  @@index([userId, updatedAt])
+  @@index([userId, remindAt])
+  @@index([folderId])
+  @@map("notes")
+}
+
+model NoteTag {
+  noteId String
+  tagId  String
+  note   Note   @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([noteId, tagId])
+  @@index([tagId])
+  @@map("note_tags")
+}
+
+model EmailCode {
+  id        String   @id @default(cuid())
+  email     String   @db.VarChar(120)
+  purpose   String   @db.VarChar(20)
+  userId    String?  @db.VarChar(191)
+  codeHash  String   @db.VarChar(64)
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@map("email_codes")
+}
+
+model ChecklistItem {
+  id     String  @id @default(cuid())
+  text   String  @db.VarChar(300)
+  done   Boolean @default(false)
+  order  Int     @default(0)
+  noteId String
+  note   Note    @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@index([noteId])
+  @@map("checklist_items")
+}

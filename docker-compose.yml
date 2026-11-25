@@ -1,0 +1,65 @@
+# NAS（群晖 Container Manager、威联通 Container Station）：
+#   不要点界面上的「构建」。在项目目录执行 sh nas-up.sh
+#   脚本逐个构建并关闭 provenance，避免停在 resolving provenance for metadata file。
+# 和 bonmanage 一样：MySQL、接口只在本项目网络里，宿主机只开放 WEB_PORT。
+
+name: bonnote
+
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --bind-address=0.0.0.0
+      - --innodb-use-native-aio=0
+    volumes:
+      - ${MYSQL_DATA_DIR:-./data/mysql}:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 120s
+
+  api:
+    image: bonnote-api:latest
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      # 必须写成 disabled=true。写 false 时 Compose 不会传给 BuildKit，群晖仍会停在 resolving provenance
+      provenance: "disabled=true"
+      sbom: "disabled=true"
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      PORT: 3001
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    image: bonnote-web:latest
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+      provenance: "disabled=true"
+      sbom: "disabled=true"
+      args:
+        SEED_DEMO: ${SEED_DEMO:-}
+        DEMO_EMAIL: ${DEMO_EMAIL:-}
+        DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT}:80"
